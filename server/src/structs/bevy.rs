@@ -6,7 +6,28 @@ use futures::future::join_all;
 use parking_lot::Mutex;
 use wtransport::SendStream;
 
-/// the world def
+use crate::SessionCrypto;
+
+pub struct PlayerConnection {
+    pub stream: SendStream,
+    pub crypto: SessionCrypto,
+}
+
+impl PlayerConnection {
+    pub fn new(stream: SendStream, crypto: SessionCrypto) -> Self {
+        Self { stream, crypto }
+    }
+
+    pub async fn send_encrypted(
+        &mut self,
+        plaintext: &[u8],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let ciphertext = self.crypto.encrypt(plaintext).unwrap();
+        self.stream.write_all(&ciphertext).await?;
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub struct World {
     pub bevy_world: bevy_ecs::world::World,
@@ -14,46 +35,49 @@ pub struct World {
 }
 pub type MWorld = Arc<Mutex<World>>;
 
-type IDToSender = DashMap<u8, Arc<Mutex<SendStream>>>;
+pub type IDToConnection = DashMap<u8, Arc<Mutex<PlayerConnection>>>;
+
 impl World {
-    // TODO: discard client if failed to send. i hate people with bad internet.
-    pub async fn send_to(id: u8, packet: bytes::Bytes, streams: &IDToSender) {
-        if let Some(stream) = streams.get_mut(&id) {
-            if let Err(e) = stream.try_lock().unwrap().write_all(&packet).await {
-                tracing::warn!("failed to send packets to {}: {}", id, e);
+    pub async fn send_to(id: u8, plaintext: &[u8], connections: &IDToConnection) {
+        if let Some(conn_ref) = connections.get(&id) {
+            let mut conn = conn_ref.lock();
+            if let Err(e) = conn.send_encrypted(plaintext).await {
+                tracing::warn!("Failed to send packet to player {}: {}", id, e);
             }
         }
     }
 
-    pub async fn broadcast(packet: bytes::Bytes, streams: &IDToSender) {
-        let futures = streams.iter().map(|entry| {
-            let stream = entry.value().clone();
-            let data = packet.clone();
+    pub async fn broadcast(plaintext: &[u8], connections: &IDToConnection) {
+        let futures = connections.iter().map(|entry| {
+            let conn = entry.value().clone();
+            let data = plaintext.to_vec();
 
             async move {
-                let mut lock = stream.lock();
-                let _ = lock.write_all(&data).await;
+                let mut lock = conn.lock();
+                let _ = lock.send_encrypted(&data).await;
             }
         });
 
         join_all(futures).await;
     }
 
-    pub async fn broadcast_with_exceptions(exceptions: &[u8], packet: &[u8], streams: &IDToSender) {
-        let mut futures = vec![];
+    pub async fn broadcast_with_exceptions(
+        exceptions: &[u8],
+        plaintext: &[u8],
+        connections: &IDToConnection,
+    ) {
+        let futures = connections
+            .iter()
+            .filter(|entry| !exceptions.contains(entry.key()))
+            .map(|entry| {
+                let conn = entry.value().clone();
+                let data = plaintext.to_vec();
 
-        for entry in streams.iter() {
-            if exceptions.contains(entry.key()) {
-                continue;
-            }
-
-            let stream = entry.value().clone();
-
-            futures.push(async move {
-                let mut lock = stream.lock();
-                let _ = lock.write_all(&packet).await;
+                async move {
+                    let mut lock = conn.lock();
+                    let _ = lock.send_encrypted(&data).await;
+                }
             });
-        };
 
         join_all(futures).await;
     }

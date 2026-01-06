@@ -5,6 +5,4 @@ use shared::structs::server::Player;
 // map will be infinite, however there will be a boundary where
 // you will slow down and get damage (~30 dps)
 
-pub fn map_system(mut query: Query<(&mut Player)>) {
-    
-}
+pub fn map_system(mut query: Query<(&mut Player)>) {}

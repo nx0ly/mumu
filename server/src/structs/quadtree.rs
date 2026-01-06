@@ -197,7 +197,11 @@ impl Quadtree {
         let mut temp = self.get_points_within_rect(rect);
         temp.retain(|point| {
             let dist = Point::dist(point.x, point.y, x, y);
-            if dist < rad.powf(2.) { true } else { false }
+            if dist < rad.powf(2.) {
+                true
+            } else {
+                false
+            }
         });
 
         temp

@@ -1,7 +1,7 @@
 [package]
 name = "server"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
 anyhow = "1.0.100"
@@ -21,8 +21,15 @@ borsh-derive = "1.6.0"
 shared = { path = "../shared", features = ["server"] }
 tracing-subscriber = "0.3.22"
 bytes = "1.11.0"
-nanorand = "0.8.0"
 serde = { version = "1.0.228", features = ["derive"] }
 rayon = "1.11.0"
 parking_lot = "0.12.5"
 futures = "0.3.31"
+chacha20poly1305 = "0.10.1"
+rand = "0.8"
+rand_core = "0.6"
+x25519-dalek = { version = "2.0", features = ["static_secrets"] }
+sha2 = "0.10.9"
+pqc_kyber = { version = "0.7.1", features = ["kyber768", "90s", "avx2"] }
+hkdf = "0.12.4"
+nanorand = { version = "0.7.0", features = ["wyrand"] }
